@@ -1,6 +1,5 @@
 import abc
 import json
-from lxml import html
 import pathlib
 import re
 import sqlite3
@@ -32,39 +31,26 @@ class SlackImageSink(ImageSink):
 		else:
 			if team not in teams:
 				raise SystemExit("You don't seem to be signed in to the \"%s\" Slack team." % team)
-		target = "https://%s.slack.com/customize/emoji" % team
-		response = requests.get(target, cookies=cookies)
-		matcher = re.search("<input type=\"hidden\" name=\"crumb\" value=\"([^\"]+)\"", response.text)
+		response = requests.get("https://%s.slack.com/" % team, cookies=cookies)
+		matcher = re.search("api_token: \"([^\"]+)\"", response.text)
 		if matcher is None:
-			raise SystemExit("Could not find Slack crumb. Maybe the Slack webpage has changed.")
-		crumb = matcher.group(1)
+			raise SystemExit("Could not find Slack token. Maybe the Slack webpage has changed.")
+		token = matcher.group(1)
 		response = requests.post(
-			target,
+			"https://%s.slack.com/api/emoji.add" % team,
 			data={
-				"add": "1",
-				"crumb": crumb,
+				"token": token,
 				"name": name,
 				"mode": "data",
-				"aliased": "",
-				"resized": "",
 			},
 			files={
-				"img": emoji.make_blob(),
+				"image": emoji.make_blob(),
 			},
-			cookies=cookies,
 		)
 		response.raise_for_status()
-		if response.url.endswith("?added=1&name=" + name):
+		if "error" not in response.json():
 			return
-		content = html.fromstring(response.content)
-		error = content.xpath("//p[contains(concat(' ', @class, ' '), ' alert_error ')]")
-		if error:
-			html_error = html.tostring(error[0])
-			text_error = re.sub("<.*?>", "", html_error.decode("utf-8"))
-			text_error = text_error.strip()
-			raise SystemExit("Slack error: %s" % text_error)
-		else:
-			raise SystemExit("Unknown Slack error.")
+		raise SystemExit("Slack error: %s" % self.localize_error(response.json()["error"]))
 
 	@staticmethod
 	def parse_name(name:str) -> typing.Tuple[typing.Optional[str], str]:
@@ -103,3 +89,10 @@ class SlackImageSink(ImageSink):
 				raise SystemExit("Team URL \"%s\" was not in an expected format." % team_url)
 			team_names += [matcher.group(1)]
 		return team_names
+
+	@staticmethod
+	def localize_error(error:str):
+		english = {
+			"error_name_taken": "An emoji with the requested name already exists.",
+		}
+		return english.get(error, error)
