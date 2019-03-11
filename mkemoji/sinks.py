@@ -32,7 +32,7 @@ class SlackImageSink(ImageSink):
 			if team not in teams:
 				raise SystemExit("You don't seem to be signed in to the \"%s\" Slack team." % team)
 		response = requests.get("https://%s.slack.com/" % team, cookies=cookies)
-		matcher = re.search("api_token: \"([^\"]+)\"", response.text)
+		matcher = re.search("\"api_token\":\"([^\"]+)\"", response.text)
 		if matcher is None:
 			raise SystemExit("Could not find Slack token. Maybe the Slack webpage has changed.")
 		token = matcher.group(1)
