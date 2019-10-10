@@ -74,21 +74,12 @@ class SlackImageSink(ImageSink):
 
 	@staticmethod
 	def get_slack_teams() -> typing.List[str]:
-		teams_path = pathlib.Path.home() / ".config" / "Slack" / "storage" / "slack-teams"
+		teams_path = pathlib.Path.home() / ".config" / "Slack" / "storage" / "slack-workspaces"
 		if not teams_path.is_file():
 			raise SystemExit("Could not find Slack teams file. Is Slack installed and have you signed in to a team?")
 		with teams_path.open() as teams_file:
 			teams = json.load(teams_file)
-		team_urls = [team["team_url"] for team in teams.values() if team["hasValidSession"]]
-		if not team_urls:
-			raise SystemExit("Could not find any Slack teams. Have you signed in to a team?")
-		team_names = [] # type: typing.List[str]
-		for team_url in team_urls:
-			matcher = re.match("^https://([^\\.]+)\\.slack\\.com/.*$", team_url)
-			if matcher is None:
-				raise SystemExit("Team URL \"%s\" was not in an expected format." % team_url)
-			team_names += [matcher.group(1)]
-		return team_names
+		return [team["domain"] for team in teams.values()]
 
 	@staticmethod
 	def localize_error(error:str):
