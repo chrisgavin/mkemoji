@@ -13,13 +13,13 @@ class ImageSink(metaclass=abc.ABCMeta):
 	def max_resolution(self) -> int: pass
 
 	@abc.abstractmethod
-	def add_emoji(self, name:str, emoji: Image) -> None: pass
+	def add_emoji(self, name:str, emoji: Image, replace:bool) -> None: pass
 
 class SlackImageSink(ImageSink):
 	def max_resolution(self) -> int:
 		return 128
 
-	def add_emoji(self, name:str, emoji: Image) -> None:
+	def add_emoji(self, name:str, emoji: Image, replace:bool) -> None:
 		cookies = self.get_slack_cookies()
 		teams = self.get_slack_teams()
 		team, name = self.parse_name(name)
@@ -36,6 +36,16 @@ class SlackImageSink(ImageSink):
 		if matcher is None:
 			raise SystemExit("Could not find Slack token. Maybe the Slack webpage has changed.")
 		token = matcher.group(1)
+		if replace:
+			response = requests.post(
+				"https://%s.slack.com/api/emoji.remove" % team,
+				data={
+					"token": token,
+					"name": name,
+				},
+			)
+			response.raise_for_status()
+		response.raise_for_status()
 		response = requests.post(
 			"https://%s.slack.com/api/emoji.add" % team,
 			data={
@@ -48,9 +58,8 @@ class SlackImageSink(ImageSink):
 			},
 		)
 		response.raise_for_status()
-		if "error" not in response.json():
-			return
-		raise SystemExit("Slack error: %s" % self.localize_error(response.json()["error"]))
+		if "error" in response.json():
+			raise SystemExit("Slack error: %s" % self.localize_error(response.json()["error"], replace))
 
 	@staticmethod
 	def parse_name(name:str) -> typing.Tuple[typing.Optional[str], str]:
@@ -82,8 +91,8 @@ class SlackImageSink(ImageSink):
 		return [team["domain"] for team in teams.values()]
 
 	@staticmethod
-	def localize_error(error:str):
+	def localize_error(error:str, replace:bool) -> str:
 		english = {
-			"error_name_taken": "An emoji with the requested name already exists.",
+			"error_name_taken": "You don't have permission to remove the existing emoji." if replace else "An emoji with the requested name already exists.",
 		}
 		return english.get(error, error)
